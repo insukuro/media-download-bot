@@ -1,15 +1,15 @@
+# src/main.py
 import asyncio
 import sys
 from loguru import logger
 
-from .config import settings
-from .database import init_db
-from .core.downloader.service import DownloadService
-from .core.cache.manager import FileCacheManager
-from .core.queue.manager import AsyncDownloadQueue
-from .sources.youtube import YouTubeDownloader
-from .sources.tiktok import TikTokDownloader
-from .adapters.telegram.adapter import TelegramAdapter
+from src.config import settings
+from src.database import init_db
+from src.core.downloader import DownloadService
+from src.core.cache import FileCacheManager
+from src.core.queue import AsyncDownloadQueue
+from src.sources import YouTubeDownloader, TikTokDownloader
+from src.adapters.telegram import TelegramAdapter
 
 
 async def main():
