@@ -34,7 +34,6 @@ poetry.lock
 .docker/
 
 # Data
-cache/
 temp/
 logs/
 data/

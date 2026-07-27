@@ -59,3 +59,51 @@ i18n - интернационализация
 Реализуйте необходимые методы
 
 Зарегистрируйте в src/main.py
+
+```
+media-download-bot
+├─ Dockerfile.yml
+├─ README.md
+├─ docker-compose.yml
+├─ pyproject.toml
+├─ requirements.txt
+└─ src
+   ├─ __init__.py
+   ├─ adapters
+   │  ├─ __init__.py
+   │  ├─ telegram
+   │  │  ├─ __init__.py
+   │  │  ├─ adapter.py
+   │  │  └─ handlers.py
+   │  └─ vk
+   │     └─ __init__.py
+   ├─ admin
+   │  └─ __init__.py
+   ├─ capabilities
+   │  └─ __init__.py
+   ├─ config.py
+   ├─ core
+   │  ├─ __init__.py
+   │  ├─ downloader
+   │  │  ├─ __init__.py
+   │  │  ├─ exceptions.py
+   │  │  ├─ interfaces.py
+   │  │  └─ service.py
+   │  └─ queue
+   │     ├─ __init__.py
+   │     └─ manager.py
+   ├─ database.py
+   ├─ i18n
+   │  ├─ __init__.py
+   │  ├─ loader.py
+   │  └─ locales
+   │     ├─ en.json
+   │     └─ ru.json
+   ├─ main.py
+   └─ sources
+      ├─ __init__.py
+      ├─ base.py
+      ├─ tiktok.py
+      └─ youtube.py
+
+```
