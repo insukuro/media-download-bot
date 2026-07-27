@@ -116,12 +116,12 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         
         args = message.text.split(maxsplit=1)
         if len(args) < 2:
-            await message.answer(_("yt_usage", locale))
+            await message.answer(translate("yt_usage", locale))
             return
         
         url = args[1].strip()
         url_key = url_storage.store(url)
-        status_msg = await message.answer(_("analyzing_url", locale))
+        status_msg = await message.answer(translate("analyzing_url", locale))
         
         try:
             metadata = await download_service.get_metadata(url)
@@ -153,11 +153,11 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             
             info_text = (
                 f"<b>📹 {metadata.title}</b>\n\n"
-                f"👤 <b>{_('author', locale)}:</b> {metadata.author}\n"
-                f"⏱ <b>{_('duration', locale)}:</b> {metadata.duration_formatted}\n"
-                f"📦 <b>{_('size', locale)}:</b> {metadata.size_mb:.1f} MB\n"
-                f"🎬 <b>{_('type', locale)}:</b> {metadata.media_type.value}\n\n"
-                f"<i>{_('select_quality', locale)}</i>"
+                f"👤 <b>{translate('author', locale)}:</b> {metadata.author}\n"
+                f"⏱ <b>{translate('duration', locale)}:</b> {metadata.duration_formatted}\n"
+                f"📦 <b>{translate('size', locale)}:</b> {metadata.size_mb:.1f} MB\n"
+                f"🎬 <b>{translate('type', locale)}:</b> {metadata.media_type.value}\n\n"
+                f"<i>{translate('select_quality', locale)}</i>"
             )
             
             if metadata.thumbnail_url:
@@ -173,7 +173,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         except Exception as e:
             logger.error(f"Error processing YouTube URL: {e}")
             await status_msg.edit_text(
-                _("error_processing_url", locale, error=str(e))
+                translate("error_processing_url", locale, error=str(e))
             )
     
     @dp.message(Command("tt"))
