@@ -1,0 +1,91 @@
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: media_downloader_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=sqlite+aiosqlite:///data/database.db
+      - REDIS_URL=redis://redis:6379/0
+      - CACHE_DIR=/app/cache
+      - TEMP_DIR=/app/temp
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Монтируем только директории с данными, а не код
+      - media_cache:/app/cache
+      - media_temp:/app/temp
+      - media_logs:/app/logs
+      - media_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: media_downloader_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - bot_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # Админ-панель для БД (опционально)
+  adminer:
+    image: adminer:latest
+    container_name: media_downloader_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=db
+    networks:
+      - bot_network
+    profiles:
+      - admin
+
+volumes:
+  media_cache:
+    driver: local
+  media_temp:
+    driver: local
+  media_logs:
+    driver: local
+  media_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  bot_network:
+    driver: bridge

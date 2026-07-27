@@ -1,0 +1,17 @@
+{
+  "welcome_message": "👋 Добро пожаловать в MediaDownloader!\n\nЯ помогу скачать видео и аудио с YouTube, TikTok и других платформ.",
+  "help_message": "📋 <b>Доступные команды:</b>\n\n/yt [ссылка] - Скачать YouTube видео\n/tt [ссылка] - Скачать TikTok видео\n/music [ссылка] - Скачать аудио (MP3)\n/admin - Панель администратора\n/help - Помощь",
+  "yt_usage": "❌ Укажите ссылку на YouTube видео\nПример: /yt https://youtube.com/watch?v=...",
+  "tt_usage": "❌ Укажите ссылку на TikTok видео\nПример: /tt https://tiktok.com/@user/video/...",
+  "music_usage": "❌ Укажите ссылку на видео\nПример: /music https://youtube.com/watch?v=...",
+  "analyzing_url": "🔍 Анализирую ссылку...",
+  "downloading": "Загрузка...",
+  "downloading_audio": "🎵 Скачиваю аудио...",
+  "quality": "Качество",
+  "served_from_cache": "💾 Взято из кэша",
+  "download_failed": "❌ Не удалось скачать: {error}",
+  "error_processing_url": "❌ Ошибка обработки: {error}",
+  "error_occurred": "❌ Произошла ошибка",
+  "access_denied": "⛔ Доступ запрещен",
+  "playlist_not_supported": "❌ Плейлисты пока не поддерживаются для этого источника"
+}

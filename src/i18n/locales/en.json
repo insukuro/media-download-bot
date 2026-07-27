@@ -1,0 +1,17 @@
+{
+  "welcome_message": "👋 Welcome to MediaDownloader!\n\nI can help you download videos and audio from YouTube, TikTok and other platforms.",
+  "help_message": "📋 <b>Available commands:</b>\n\n/yt [link] - Download YouTube video\n/tt [link] - Download TikTok video\n/music [link] - Download audio (MP3)\n/admin - Admin panel\n/help - Help",
+  "yt_usage": "❌ Please provide a YouTube video link\nExample: /yt https://youtube.com/watch?v=...",
+  "tt_usage": "❌ Please provide a TikTok video link\nExample: /tt https://tiktok.com/@user/video/...",
+  "music_usage": "❌ Please provide a video link\nExample: /music https://youtube.com/watch?v=...",
+  "analyzing_url": "🔍 Analyzing URL...",
+  "downloading": "Downloading...",
+  "downloading_audio": "🎵 Downloading audio...",
+  "quality": "Quality",
+  "served_from_cache": "💾 Served from cache",
+  "download_failed": "❌ Download failed: {error}",
+  "error_processing_url": "❌ Processing error: {error}",
+  "error_occurred": "❌ An error occurred",
+  "access_denied": "⛔ Access denied",
+  "playlist_not_supported": "❌ Playlists are not yet supported for this source"
+}
