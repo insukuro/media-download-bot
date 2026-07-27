@@ -1,3 +1,4 @@
+# src/sources/youtube.py
 import asyncio
 import os
 import tempfile
@@ -48,7 +49,7 @@ class YouTubeDownloader(BaseSourceDownloader):
             
             # Определяем тип
             media_type = MediaType.VIDEO
-            if info.get('duration', 0) <= 60:  # Shorts обычно до 60 секунд
+            if info.get('duration', 0) <= 60:
                 if 'shorts' in url:
                     media_type = MediaType.SHORTS
             
@@ -143,9 +144,6 @@ class YouTubeDownloader(BaseSourceDownloader):
         except Exception as e:
             logger.error(f"Download failed: {e}")
             raise
-        finally:
-            # Очистка временных файлов (кроме скачанного)
-            pass
     
     async def get_playlist(self, url: str, limit: Optional[int] = None) -> List[str]:
         """Получить список видео из плейлиста"""
@@ -193,16 +191,9 @@ class YouTubeDownloader(BaseSourceDownloader):
                         available.add(Quality.MEDIUM)
                     if height <= 1080:
                         available.add(Quality.HIGH)
-                
-                abr = f.get('abr')
-                if abr:
-                    abr = int(abr)
-                    if abr <= 128:
-                        available.add(Quality.AUDIO_LOW)
-                    if abr <= 192:
-                        available.add(Quality.AUDIO_MEDIUM)
-                    if abr <= 320:
-                        available.add(Quality.AUDIO_HIGH)
+            
+            # Аудио всегда доступно
+            available.update([Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH])
             
             return sorted(available, key=lambda q: q.value)
         except:

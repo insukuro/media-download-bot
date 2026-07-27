@@ -84,6 +84,9 @@ media-download-bot
    ├─ config.py
    ├─ core
    │  ├─ __init__.py
+   │  ├─ cache
+   │  │  ├─ __init__.py
+   │  │  └─ manager.py
    │  ├─ downloader
    │  │  ├─ __init__.py
    │  │  ├─ exceptions.py
