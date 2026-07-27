@@ -30,6 +30,7 @@ class YouTubeDownloader(BaseSourceDownloader):
             "youtube.com/playlist"
         ])
     
+
     async def extract_metadata(self, url: str) -> MediaMetadata:
         """Извлечь метаданные видео"""
         try:
@@ -39,19 +40,56 @@ class YouTubeDownloader(BaseSourceDownloader):
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                'skip_download': True,  # ВАЖНО: не проверяем форматы
-                'no_check_formats': True,  # ВАЖНО: не проверяем доступность форматов
+                'skip_download': True,
+                'no_check_formats': True,
+                'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},  # 🔥 ПРОПУСКАЕМ DASH/HLS
+                'youtube_include_dash_manifest': False,  # 🔥 НЕ ЗАГРУЖАЕМ МАНИФЕСТ
+                'format': 'best[height<=1080]/best',  # 🔥 ЯВНО УКАЗЫВАЕМ ФОРМАТ
+                'format_sort': ['res:1080', 'codec:h264'],  # 🔥 СОРТИРОВКА ФОРМАТОВ
+                'noplaylist': True,
+                'no_color': True,
+                'socket_timeout': 10,
+                'retries': 3,
             }
             
             def extract():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.extract_info(url, download=False)
+                    try:
+                        return ydl.extract_info(url, download=False)
+                    except Exception as e:
+                        # Пробуем еще раз с минимальными настройками
+                        logger.warning(f"First attempt failed: {e}, trying minimal opts")
+                        ydl_opts_min = {
+                            'quiet': True,
+                            'no_warnings': True,
+                            'skip_download': True,
+                            'extract_flat': True,  # 🔥 ПЛОСКОЕ ИЗВЛЕЧЕНИЕ
+                        }
+                        with yt_dlp.YoutubeDL(ydl_opts_min) as ydl2:
+                            return ydl2.extract_info(url, download=False)
             
             info = await loop.run_in_executor(None, extract)
             
+            # Если extract_flat, то дополняем информацию
+            if info.get('duration') is None:
+                # Пробуем получить больше инфы
+                try:
+                    ydl_opts_full = {
+                        'quiet': True,
+                        'skip_download': True,
+                        'extract_flat': False,
+                        'no_check_formats': True,
+                        'format': 'best',
+                    }
+                    with yt_dlp.YoutubeDL(ydl_opts_full) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                except:
+                    pass
+            
             # Определяем тип
             media_type = MediaType.VIDEO
-            if info.get('duration', 0) <= 60:
+            duration = info.get('duration', 0) or 0
+            if duration <= 60:
                 if 'shorts' in url.lower() or 'short' in str(info.get('webpage_url', '')).lower():
                     media_type = MediaType.SHORTS
             
@@ -59,7 +97,7 @@ class YouTubeDownloader(BaseSourceDownloader):
                 url=url,
                 title=info.get('title', 'Unknown'),
                 author=info.get('uploader', 'Unknown'),
-                duration=info.get('duration', 0),
+                duration=duration,
                 size=info.get('filesize') or info.get('filesize_approx') or 0,
                 thumbnail_url=info.get('thumbnail'),
                 media_type=media_type,
@@ -71,8 +109,28 @@ class YouTubeDownloader(BaseSourceDownloader):
             )
         except Exception as e:
             logger.error(f"Failed to extract metadata: {e}")
-            raise
-    
+            # 🔥 ПОСЛЕДНЯЯ ПОПЫТКА - только базовая инфа
+            try:
+                ydl_opts_last = {
+                    'quiet': True,
+                    'extract_flat': True,
+                    'skip_download': True,
+                }
+                with yt_dlp.YoutubeDL(ydl_opts_last) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                return MediaMetadata(
+                    url=url,
+                    title=info.get('title', 'Unknown'),
+                    author=info.get('uploader', 'Unknown'),
+                    duration=info.get('duration', 0) or 0,
+                    size=0,
+                    thumbnail_url=info.get('thumbnail'),
+                    media_type=MediaType.VIDEO,
+                    extra={}
+                )
+            except Exception as e2:
+                logger.error(f"Final attempt failed: {e2}")
+                raise
     async def download(
         self,
         url: str,
