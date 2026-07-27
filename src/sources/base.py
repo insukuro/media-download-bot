@@ -16,4 +16,7 @@ class BaseSourceDownloader(SourceDownloader, ABC):
     
     async def get_available_qualities(self, url: str) -> List[Quality]:
         """По умолчанию возвращаем все качества"""
-        return list(Quality)
+        return [
+            Quality.LOW, Quality.MEDIUM, Quality.HIGH,
+            Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH
+        ]

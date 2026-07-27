@@ -1,13 +1,78 @@
-# src/adapters/telegram/handlers.py
+# src/adapters/telegram/handlers.py (замена целиком)
 from aiogram import Dispatcher, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from loguru import logger
+import hashlib
+import json
+import os
+from datetime import datetime, timedelta
 
 from ...core.downloader.interfaces import Quality, MediaType, DownloadStatus
 from ...core.downloader.service import DownloadService
+from ...core.cache.manager import FileCacheManager
 from ...i18n.loader import i18n
 from ...config import settings
+
+
+# Кэш для временного хранения URL (используем тот же подход что и FileCacheManager)
+class UrlStorage:
+    """Временное хранилище URL с автоочисткой"""
+    
+    def __init__(self):
+        self.storage_file = os.path.join(settings.base_dir, "url_storage.json")
+        self._data = {}
+        self._load()
+    
+    def _load(self):
+        try:
+            if os.path.exists(self.storage_file):
+                with open(self.storage_file, 'r') as f:
+                    self._data = json.load(f)
+        except:
+            self._data = {}
+    
+    def _save(self):
+        try:
+            with open(self.storage_file, 'w') as f:
+                json.dump(self._data, f)
+        except:
+            pass
+    
+    def store(self, url: str) -> str:
+        """Сохранить URL и вернуть короткий ключ"""
+        clean_url = url.split('?')[0] if '?' in url else url
+        key = hashlib.md5(clean_url.encode()).hexdigest()[:8]
+        self._data[key] = {
+            'url': clean_url,
+            'created_at': datetime.now().isoformat()
+        }
+        self._save()
+        return key
+    
+    def get(self, key: str) -> str:
+        """Получить URL по ключу"""
+        data = self._data.get(key)
+        if data:
+            return data['url']
+        return key
+    
+    def cleanup(self, max_age_hours: int = 24):
+        """Очистить старые записи"""
+        now = datetime.now()
+        to_delete = []
+        for key, data in self._data.items():
+            created = datetime.fromisoformat(data['created_at'])
+            if now - created > timedelta(hours=max_age_hours):
+                to_delete.append(key)
+        for key in to_delete:
+            del self._data[key]
+        if to_delete:
+            self._save()
+
+
+# Глобальный инстанс хранилища URL
+url_storage = UrlStorage()
 
 
 def get_locale(from_user) -> str:
@@ -32,7 +97,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
     async def cmd_start(message: types.Message):
         locale = get_locale(message.from_user)
         await message.answer(
-            _( "welcome_message", locale) + "\n\n" + _( "help_message", locale)
+            _("welcome_message", locale) + "\n\n" + _("help_message", locale)
         )
     
     @dp.message(Command("help"))
@@ -50,6 +115,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             return
         
         url = args[1].strip()
+        url_key = url_storage.store(url)
         status_msg = await message.answer(_("analyzing_url", locale))
         
         try:
@@ -61,7 +127,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             for quality in [Quality.LOW, Quality.MEDIUM, Quality.HIGH]:
                 builder.button(
                     text=f"📹 {quality.value}",
-                    callback_data=f"dl:{url}:{quality.value}:video"
+                    callback_data=f"dl:{url_key}:{quality.value}:video"
                 )
             builder.adjust(3)
             
@@ -69,7 +135,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             for quality in [Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH]:
                 builder.button(
                     text=f"🎵 {quality.value}",
-                    callback_data=f"dl:{url}:{quality.value}:audio"
+                    callback_data=f"dl:{url_key}:{quality.value}:audio"
                 )
             builder.adjust(3)
             
@@ -108,6 +174,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             return
         
         url = args[1].strip()
+        url_key = url_storage.store(url)
         status_msg = await message.answer(_("analyzing_url", locale))
         
         try:
@@ -116,7 +183,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             builder = InlineKeyboardBuilder()
             builder.button(
                 text=_("download_without_watermark", locale),
-                callback_data=f"dl:{url}:{Quality.HIGH.value}:video"
+                callback_data=f"dl:{url_key}:{Quality.HIGH.value}:video"
             )
             
             info_text = (
@@ -202,7 +269,13 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         locale = get_locale(callback_query.from_user)
         
         try:
-            _, url, quality_str, media_type_str = callback_query.data.split(":", 3)
+            parts = callback_query.data.split(":", 3)
+            if len(parts) != 4:
+                await callback_query.answer("Invalid callback data")
+                return
+            
+            _, url_key, quality_str, media_type_str = parts
+            url = url_storage.get(url_key)  # Восстанавливаем URL
             quality = Quality(quality_str)
             media_type = MediaType(media_type_str)
             
@@ -259,3 +332,6 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             await callback_query.message.edit_caption(
                 caption=f"❌ {_('error_occurred', locale)}\n<i>{str(e)}</i>"
             )
+    
+    # Очистка старых URL при запуске
+    url_storage.cleanup(max_age_hours=24)
