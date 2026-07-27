@@ -110,6 +110,7 @@ class DownloadService:
         
         return tasks
     
+
     async def _process_download(self, task: DownloadTask) -> DownloadResult:
         """Обработка загрузки с контролем параллелизма"""
         async with self._download_lock:
@@ -118,10 +119,10 @@ class DownloadService:
                 task.status = DownloadStatus.DOWNLOADING
                 await self.queue.update_task(task)
                 
-                # Прогресс коллбэк
-                async def progress_callback(percent: float):
+                # 🔥 Синхронный коллбэк (без asyncio.create_task)
+                def progress_callback(percent: float):
                     task.progress = percent
-                    await self.queue.update_task(task)
+                    # Не вызываем асинхронные методы здесь!
                 
                 # Загружаем
                 result = await source.download(

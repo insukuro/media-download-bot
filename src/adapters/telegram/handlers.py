@@ -109,47 +109,55 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         locale = get_locale(message.from_user)
         await message.answer(translate("help_message", locale))
     
+
     @dp.message(Command("yt"))
     async def cmd_youtube(message: types.Message):
         locale = get_locale(message.from_user)
         
         args = message.text.split(maxsplit=1)
         if len(args) < 2:
-            await message.answer(translate("yt_usage", locale))
+            await message.answer(_("yt_usage", locale))
             return
         
         url = args[1].strip()
         url_key = url_storage.store(url)
-        status_msg = await message.answer(translate("analyzing_url", locale))
+        status_msg = await message.answer(_("analyzing_url", locale))
         
         try:
             metadata = await download_service.get_metadata(url)
             
+            # 🔥 ПОЛУЧАЕМ РЕАЛЬНО ДОСТУПНЫЕ КАЧЕСТВА
+            available_qualities = await download_service.get_available_qualities(url)
+            
             builder = InlineKeyboardBuilder()
             
-            # Видео качества
-            for quality in [Quality.LOW, Quality.MEDIUM, Quality.HIGH]:
-                builder.button(
-                    text=f"📹 {quality.value}",
-                    callback_data=f"dl:{url_key}:{quality.value}:video"
-                )
-            builder.adjust(3)
+            # Видео качества (только те что реально есть)
+            video_qualities = [q for q in available_qualities if q in [Quality.LOW, Quality.MEDIUM, Quality.HIGH]]
+            if video_qualities:
+                for quality in video_qualities:
+                    builder.button(
+                        text=f"📹 {quality.value}",
+                        callback_data=f"dl:{url_key}:{quality.value}:video"
+                    )
+                builder.adjust(len(video_qualities))
             
             # Аудио качества
-            for quality in [Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH]:
-                builder.button(
-                    text=f"🎵 {quality.value}",
-                    callback_data=f"dl:{url_key}:{quality.value}:audio"
-                )
-            builder.adjust(3)
+            audio_qualities = [q for q in available_qualities if q in [Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH]]
+            if audio_qualities:
+                for quality in audio_qualities:
+                    builder.button(
+                        text=f"🎵 {quality.value}",
+                        callback_data=f"dl:{url_key}:{quality.value}:audio"
+                    )
+                builder.adjust(len(audio_qualities))
             
             info_text = (
                 f"<b>📹 {metadata.title}</b>\n\n"
-                f"👤 <b>{translate('author', locale)}:</b> {metadata.author}\n"
-                f"⏱ <b>{translate('duration', locale)}:</b> {metadata.duration_formatted}\n"
-                f"📦 <b>{translate('size', locale)}:</b> {metadata.size_mb:.1f} MB\n"
-                f"🎬 <b>{translate('type', locale)}:</b> {metadata.media_type.value}\n\n"
-                f"<i>{translate('select_quality', locale)}</i>"
+                f"👤 <b>{_('author', locale)}:</b> {metadata.author}\n"
+                f"⏱ <b>{_('duration', locale)}:</b> {metadata.duration_formatted}\n"
+                f"📦 <b>{_('size', locale)}:</b> {metadata.size_mb:.1f} MB\n"
+                f"🎬 <b>{_('type', locale)}:</b> {metadata.media_type.value}\n\n"
+                f"<i>{_('select_quality', locale)}</i>"
             )
             
             if metadata.thumbnail_url:
@@ -165,7 +173,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         except Exception as e:
             logger.error(f"Error processing YouTube URL: {e}")
             await status_msg.edit_text(
-                translate("error_processing_url", locale, error=str(e))
+                _("error_processing_url", locale, error=str(e))
             )
     
     @dp.message(Command("tt"))

@@ -30,7 +30,6 @@ class YouTubeDownloader(BaseSourceDownloader):
             "youtube.com/playlist"
         ])
     
-
     async def extract_metadata(self, url: str) -> MediaMetadata:
         """Извлечь метаданные видео"""
         try:
@@ -42,10 +41,6 @@ class YouTubeDownloader(BaseSourceDownloader):
                 'extract_flat': False,
                 'skip_download': True,
                 'no_check_formats': True,
-                'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},  # 🔥 ПРОПУСКАЕМ DASH/HLS
-                'youtube_include_dash_manifest': False,  # 🔥 НЕ ЗАГРУЖАЕМ МАНИФЕСТ
-                'format': 'best[height<=1080]/best',  # 🔥 ЯВНО УКАЗЫВАЕМ ФОРМАТ
-                'format_sort': ['res:1080', 'codec:h264'],  # 🔥 СОРТИРОВКА ФОРМАТОВ
                 'noplaylist': True,
                 'no_color': True,
                 'socket_timeout': 10,
@@ -57,32 +52,31 @@ class YouTubeDownloader(BaseSourceDownloader):
                     try:
                         return ydl.extract_info(url, download=False)
                     except Exception as e:
-                        # Пробуем еще раз с минимальными настройками
-                        logger.warning(f"First attempt failed: {e}, trying minimal opts")
+                        logger.warning(f"First attempt failed: {e}, trying flat extraction")
                         ydl_opts_min = {
                             'quiet': True,
                             'no_warnings': True,
                             'skip_download': True,
-                            'extract_flat': True,  # 🔥 ПЛОСКОЕ ИЗВЛЕЧЕНИЕ
+                            'extract_flat': True,
                         }
                         with yt_dlp.YoutubeDL(ydl_opts_min) as ydl2:
                             return ydl2.extract_info(url, download=False)
             
             info = await loop.run_in_executor(None, extract)
             
-            # Если extract_flat, то дополняем информацию
+            # Если extract_flat, дополняем инфу
             if info.get('duration') is None:
-                # Пробуем получить больше инфы
                 try:
                     ydl_opts_full = {
                         'quiet': True,
                         'skip_download': True,
                         'extract_flat': False,
                         'no_check_formats': True,
-                        'format': 'best',
                     }
-                    with yt_dlp.YoutubeDL(ydl_opts_full) as ydl:
-                        info = ydl.extract_info(url, download=False)
+                    def extract_full():
+                        with yt_dlp.YoutubeDL(ydl_opts_full) as ydl:
+                            return ydl.extract_info(url, download=False)
+                    info = await loop.run_in_executor(None, extract_full)
                 except:
                     pass
             
@@ -90,7 +84,8 @@ class YouTubeDownloader(BaseSourceDownloader):
             media_type = MediaType.VIDEO
             duration = info.get('duration', 0) or 0
             if duration <= 60:
-                if 'shorts' in url.lower() or 'short' in str(info.get('webpage_url', '')).lower():
+                webpage_url = str(info.get('webpage_url', ''))
+                if 'shorts' in url.lower() or 'shorts' in webpage_url.lower():
                     media_type = MediaType.SHORTS
             
             return MediaMetadata(
@@ -109,15 +104,17 @@ class YouTubeDownloader(BaseSourceDownloader):
             )
         except Exception as e:
             logger.error(f"Failed to extract metadata: {e}")
-            # 🔥 ПОСЛЕДНЯЯ ПОПЫТКА - только базовая инфа
+            # Последняя попытка
             try:
                 ydl_opts_last = {
                     'quiet': True,
                     'extract_flat': True,
                     'skip_download': True,
                 }
-                with yt_dlp.YoutubeDL(ydl_opts_last) as ydl:
-                    info = ydl.extract_info(url, download=False)
+                def extract_last():
+                    with yt_dlp.YoutubeDL(ydl_opts_last) as ydl:
+                        return ydl.extract_info(url, download=False)
+                info = await loop.run_in_executor(None, extract_last)
                 return MediaMetadata(
                     url=url,
                     title=info.get('title', 'Unknown'),
@@ -131,6 +128,7 @@ class YouTubeDownloader(BaseSourceDownloader):
             except Exception as e2:
                 logger.error(f"Final attempt failed: {e2}")
                 raise
+    
     async def download(
         self,
         url: str,
@@ -143,28 +141,31 @@ class YouTubeDownloader(BaseSourceDownloader):
         try:
             is_audio = quality in [Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH]
             
-            # Прогресс хук
+            # 🔥 ИСПРАВЛЕННЫЙ ПРОГРЕСС ХУК - без asyncio.create_task
             def progress_hook(d):
                 if progress_callback and d['status'] == 'downloading':
                     total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
                     downloaded = d.get('downloaded_bytes', 0)
                     if total > 0:
                         percent = (downloaded / total) * 100
-                        asyncio.create_task(progress_callback(percent))
+                        try:
+                            progress_callback(percent)  # Просто вызываем, без create_task
+                        except Exception as e:
+                            logger.debug(f"Progress callback error: {e}")
             
             if is_audio:
                 format_selectors = {
-                    Quality.AUDIO_LOW: 'worstaudio[ext=m4a]/worstaudio[ext=mp4]/worstaudio',
-                    Quality.AUDIO_MEDIUM: 'bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio',
+                    Quality.AUDIO_LOW: 'worstaudio/worst',
+                    Quality.AUDIO_MEDIUM: 'bestaudio[abr<=192]/bestaudio',
                     Quality.AUDIO_HIGH: 'bestaudio/best',
                 }
             else:
                 format_selectors = {
-                    Quality.LOW: 'worstvideo[height<=360]+bestaudio/worst[height<=360]/worst',
-                    Quality.MEDIUM: 'bestvideo[height<=720]+bestaudio/best[height<=720]/best',
-                    Quality.HIGH: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
+                    Quality.LOW: 'best[height<=360]/bestvideo[height<=360]+bestaudio/best',
+                    Quality.MEDIUM: 'best[height<=720]/bestvideo[height<=720]+bestaudio/best',
+                    Quality.HIGH: 'best[height<=1080]/bestvideo[height<=1080]+bestaudio/best',
                 }
-                        
+            
             ydl_opts = {
                 'format': format_selectors.get(quality, 'best'),
                 'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
@@ -173,6 +174,8 @@ class YouTubeDownloader(BaseSourceDownloader):
                 'no_warnings': True,
                 'ignoreerrors': False,
                 'no_color': True,
+                'noplaylist': True,
+                'concurrent_fragment_downloads': 4,
             }
             
             if is_audio:
@@ -182,7 +185,7 @@ class YouTubeDownloader(BaseSourceDownloader):
                     'preferredquality': quality.value.replace('kbps', ''),
                 }]
             
-            # Загружаем
+            # Загружаем в отдельном потоке
             loop = asyncio.get_event_loop()
             
             def download_video():
@@ -190,7 +193,6 @@ class YouTubeDownloader(BaseSourceDownloader):
                     info = ydl.extract_info(url, download=True)
                     filename = ydl.prepare_filename(info)
                     if is_audio:
-                        # Меняем расширение если аудио
                         base = os.path.splitext(filename)[0]
                         filename = base + '.mp3'
                     return info, filename
@@ -199,10 +201,11 @@ class YouTubeDownloader(BaseSourceDownloader):
             
             # Проверяем что файл существует
             if not os.path.exists(filename):
-                # Может быть другое расширение
-                possible_files = os.listdir(temp_dir)
+                possible_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f))]
                 if possible_files:
                     filename = os.path.join(temp_dir, possible_files[0])
+                else:
+                    raise FileNotFoundError("Downloaded file not found")
             
             # Создаем метаданные
             metadata = await self.extract_metadata(url)
@@ -248,7 +251,7 @@ class YouTubeDownloader(BaseSourceDownloader):
         return await loop.run_in_executor(None, extract_playlist)
     
     async def get_available_qualities(self, url: str) -> List[Quality]:
-        """Получить доступные качества"""
+        """Получить реально доступные качества"""
         try:
             ydl_opts = {
                 'quiet': True,
@@ -267,20 +270,36 @@ class YouTubeDownloader(BaseSourceDownloader):
             formats = info.get('formats', [])
             available = set()
             
+            # Собираем реальные разрешения
+            heights = set()
             for f in formats:
                 height = f.get('height')
-                if height:
-                    if height <= 360:
-                        available.add(Quality.LOW)
-                    if height <= 720:
-                        available.add(Quality.MEDIUM)
-                    if height <= 1080:
-                        available.add(Quality.HIGH)
+                if height and height > 0:
+                    heights.add(height)
+            
+            # Маппим на наши Quality
+            for h in sorted(heights):
+                if h <= 360:
+                    available.add(Quality.LOW)
+                elif h <= 720:
+                    available.add(Quality.MEDIUM)
+                elif h <= 1080:
+                    available.add(Quality.HIGH)
+                elif h <= 1440:
+                    available.add(Quality.HIGH)  # 1440p тоже показываем как HIGH
+                elif h <= 2160:
+                    available.add(Quality.HIGH)  # 4K тоже HIGH
             
             # Аудио всегда доступно
             available.update([Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH])
             
+            # Если видео качеств нет, добавляем все (запасной вариант)
+            video_qualities = {Quality.LOW, Quality.MEDIUM, Quality.HIGH}
+            if not available.intersection(video_qualities):
+                available.update(video_qualities)
+            
             return sorted(available, key=lambda q: q.value)
+            
         except Exception as e:
             logger.warning(f"Failed to get qualities, returning all: {e}")
             return list(Quality)
