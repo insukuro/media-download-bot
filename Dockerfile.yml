@@ -15,6 +15,7 @@ WORKDIR /app
 # Копирование и установка зависимостей
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade yt-dlp
 
 # Копирование исходного кода
 COPY src/ ./src/
