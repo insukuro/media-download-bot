@@ -94,20 +94,19 @@ class YouTubeDownloader(BaseSourceDownloader):
                         percent = (downloaded / total) * 100
                         asyncio.create_task(progress_callback(percent))
             
-            # ФОРМАТЫ С ЗАПАСНЫМИ ВАРИАНТАМИ
             if is_audio:
                 format_selectors = {
-                    Quality.AUDIO_LOW: 'worstaudio[ext=m4a]/worstaudio',
-                    Quality.AUDIO_MEDIUM: 'bestaudio[ext=m4a]/bestaudio',
+                    Quality.AUDIO_LOW: 'worstaudio[ext=m4a]/worstaudio[ext=mp4]/worstaudio',
+                    Quality.AUDIO_MEDIUM: 'bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio',
                     Quality.AUDIO_HIGH: 'bestaudio/best',
                 }
             else:
                 format_selectors = {
-                    Quality.LOW: 'worst[height<=360]/worst',
-                    Quality.MEDIUM: 'best[height<=720]/best',
-                    Quality.HIGH: 'best[height<=1080]/best',
+                    Quality.LOW: 'worstvideo[height<=360]+bestaudio/worst[height<=360]/worst',
+                    Quality.MEDIUM: 'bestvideo[height<=720]+bestaudio/best[height<=720]/best',
+                    Quality.HIGH: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
                 }
-            
+                        
             ydl_opts = {
                 'format': format_selectors.get(quality, 'best'),
                 'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),

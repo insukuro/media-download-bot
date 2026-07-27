@@ -82,11 +82,15 @@ def get_locale(from_user) -> str:
     return settings.default_locale
 
 
-def _(key: str, locale: str, **kwargs) -> str:
+def translate(key: str, locale: str, **kwargs) -> str:
     """Краткий метод для получения перевода"""
     text = i18n.get_text(locale, key)
     if kwargs:
-        return text.format(**kwargs)
+        try:
+            return text.format(**kwargs)
+        except (KeyError, ValueError) as e:
+            logger.warning(f"Format error for key '{key}': {e}")
+            return text
     return text
 
 
@@ -97,13 +101,13 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
     async def cmd_start(message: types.Message):
         locale = get_locale(message.from_user)
         await message.answer(
-            _("welcome_message", locale) + "\n\n" + _("help_message", locale)
+            translate("welcome_message", locale) + "\n\n" + translate("help_message", locale)
         )
     
     @dp.message(Command("help"))
     async def cmd_help(message: types.Message):
         locale = get_locale(message.from_user)
-        await message.answer(_("help_message", locale))
+        await message.answer(translate("help_message", locale))
     
     @dp.message(Command("yt"))
     async def cmd_youtube(message: types.Message):
@@ -111,12 +115,12 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         
         args = message.text.split(maxsplit=1)
         if len(args) < 2:
-            await message.answer(_("yt_usage", locale))
+            await message.answer(translate("yt_usage", locale))
             return
         
         url = args[1].strip()
         url_key = url_storage.store(url)
-        status_msg = await message.answer(_("analyzing_url", locale))
+        status_msg = await message.answer(translate("analyzing_url", locale))
         
         try:
             metadata = await download_service.get_metadata(url)
@@ -141,11 +145,11 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             
             info_text = (
                 f"<b>📹 {metadata.title}</b>\n\n"
-                f"👤 <b>{_('author', locale)}:</b> {metadata.author}\n"
-                f"⏱ <b>{_('duration', locale)}:</b> {metadata.duration_formatted}\n"
-                f"📦 <b>{_('size', locale)}:</b> {metadata.size_mb:.1f} MB\n"
-                f"🎬 <b>{_('type', locale)}:</b> {metadata.media_type.value}\n\n"
-                f"<i>{_('select_quality', locale)}</i>"
+                f"👤 <b>{translate('author', locale)}:</b> {metadata.author}\n"
+                f"⏱ <b>{translate('duration', locale)}:</b> {metadata.duration_formatted}\n"
+                f"📦 <b>{translate('size', locale)}:</b> {metadata.size_mb:.1f} MB\n"
+                f"🎬 <b>{translate('type', locale)}:</b> {metadata.media_type.value}\n\n"
+                f"<i>{translate('select_quality', locale)}</i>"
             )
             
             if metadata.thumbnail_url:
@@ -161,7 +165,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         except Exception as e:
             logger.error(f"Error processing YouTube URL: {e}")
             await status_msg.edit_text(
-                _("error_processing_url", locale, error=str(e))
+                translate("error_processing_url", locale, error=str(e))
             )
     
     @dp.message(Command("tt"))
@@ -170,35 +174,35 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         
         args = message.text.split(maxsplit=1)
         if len(args) < 2:
-            await message.answer(_("tt_usage", locale))
+            await message.answer(translate("tt_usage", locale))
             return
         
         url = args[1].strip()
         url_key = url_storage.store(url)
-        status_msg = await message.answer(_("analyzing_url", locale))
+        status_msg = await message.answer(translate("analyzing_url", locale))
         
         try:
             metadata = await download_service.get_metadata(url)
             
             builder = InlineKeyboardBuilder()
             builder.button(
-                text=_("download_without_watermark", locale),
+                text=translate("download_without_watermark", locale),
                 callback_data=f"dl:{url_key}:{Quality.HIGH.value}:video"
             )
             
             info_text = (
                 f"<b>🎵 {metadata.title}</b>\n\n"
-                f"👤 <b>{_('author', locale)}:</b> {metadata.author}\n"
-                f"⏱ <b>{_('duration', locale)}:</b> {metadata.duration_formatted}\n"
+                f"👤 <b>{translate('author', locale)}:</b> {metadata.author}\n"
+                f"⏱ <b>{translate('duration', locale)}:</b> {metadata.duration_formatted}\n"
             )
             
             # Добавляем статистику если есть
             if metadata.extra.get('play_count'):
-                info_text += f"👁 <b>{_('views', locale)}:</b> {metadata.extra['play_count']}\n"
+                info_text += f"👁 <b>{translate('views', locale)}:</b> {metadata.extra['play_count']}\n"
             if metadata.extra.get('digg_count'):
-                info_text += f"❤️ <b>{_('likes', locale)}:</b> {metadata.extra['digg_count']}\n"
+                info_text += f"❤️ <b>{translate('likes', locale)}:</b> {metadata.extra['digg_count']}\n"
             
-            info_text += f"\n<i>{_('without_watermark', locale)}</i>"
+            info_text += f"\n<i>{translate('without_watermark', locale)}</i>"
             
             if metadata.thumbnail_url:
                 await message.answer_photo(
@@ -213,7 +217,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         except Exception as e:
             logger.error(f"Error processing TikTok URL: {e}")
             await status_msg.edit_text(
-                _("error_processing_url", locale, error=str(e))
+                translate("error_processing_url", locale, error=str(e))
             )
     
     @dp.message(Command("music"))
@@ -222,11 +226,11 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
         
         args = message.text.split(maxsplit=1)
         if len(args) < 2:
-            await message.answer(_("music_usage", locale))
+            await message.answer(translate("music_usage", locale))
             return
         
         url = args[1].strip()
-        status_msg = await message.answer(_("downloading_audio", locale))
+        status_msg = await message.answer(translate("downloading_audio", locale))
         
         try:
             # Получаем метаданные
@@ -252,16 +256,16 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
                 await status_msg.delete()
                 
                 if result.from_cache:
-                    await message.answer(_("served_from_cache", locale))
+                    await message.answer(translate("served_from_cache", locale))
             else:
                 await status_msg.edit_text(
-                    _("download_failed", locale, error=result.error)
+                    translate("download_failed", locale, error=result.error)
                 )
                 
         except Exception as e:
             logger.error(f"Error downloading audio: {e}")
             await status_msg.edit_text(
-                _("error_processing_url", locale, error=str(e))
+                translate("error_processing_url", locale, error=str(e))
             )
     
     @dp.callback_query(lambda c: c.data.startswith("dl:"))
@@ -283,8 +287,8 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
             
             # Обновляем сообщение
             await callback_query.message.edit_caption(
-                caption=f"⏳ <b>{_('downloading', locale)}</b>\n\n"
-                        f"<i>{_('quality', locale)}: {quality.value}</i>"
+                caption=f"⏳ <b>{translate('downloading', locale)}</b>\n\n"
+                        f"<i>{translate('quality', locale)}: {quality.value}</i>"
             )
             
             # Скачиваем
@@ -304,7 +308,7 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
                 )
                 
                 if result.from_cache:
-                    caption += f"\n\n💾 {_('served_from_cache', locale)}"
+                    caption += f"\n\n💾 {translate('served_from_cache', locale)}"
                 
                 if media_type == MediaType.AUDIO:
                     await callback_query.message.answer_audio(
@@ -324,13 +328,13 @@ def register_handlers(dp: Dispatcher, download_service: DownloadService):
                 await callback_query.message.delete()
             else:
                 await callback_query.message.edit_caption(
-                    caption=f"❌ {_('download_failed', locale, error=result.error)}"
+                    caption=f"❌ {translate('download_failed', locale, error=result.error)}"
                 )
                 
         except Exception as e:
             logger.error(f"Error in download callback: {e}")
             await callback_query.message.edit_caption(
-                caption=f"❌ {_('error_occurred', locale)}\n<i>{str(e)}</i>"
+                caption=f"❌ {translate('error_occurred', locale)}\n<i>{str(e)}</i>"
             )
     
     # Очистка старых URL при запуске
