@@ -1,59 +1,56 @@
-
+# src/main.py
 import asyncio
 import sys
+import os
 from loguru import logger
 
 from src.config import settings
 from src.database import init_db
 from src.core.downloader import DownloadService
 from src.core.cache import FileCacheManager
+from src.core.cache.file_id_cache import FileIdCache
 from src.core.queue import AsyncDownloadQueue
 from src.sources import YouTubeDownloader, TikTokDownloader
 from src.adapters.telegram.adapter import TelegramAdapter
-from src.adapters.vk.adapter import VKAdapter
 from src.capabilities.telegram_capability import TelegramCapability
-from src.capabilities.vk_capability import VKCapability
 from src.core.url_storage import UrlStorage
 
+
 async def main():
-    """Точка входа"""
-    import os
-    # Настройка логирования
+    # Создаём рабочие директории
+    for dir_name in [settings.temp_dir, settings.cache_dir, "logs", "data"]:
+        path = os.path.join(settings.base_dir, dir_name)
+        os.makedirs(path, exist_ok=True)
+
     logger.remove()
-    logger.add(
-        sys.stdout,
-        level=settings.log_level,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
-    )
-    
+    logger.add(sys.stdout, level=settings.log_level,
+               format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
+                      "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
+
     logger.info(f"Starting {settings.app_name}...")
-    
-    # Инициализация БД
     await init_db()
-    
-    # Общие компоненты
+
     cache = FileCacheManager()
     queue = AsyncDownloadQueue()
-    
-    # Источники контента
+
     sources = {}
     if settings.youtube_enabled:
         sources["youtube"] = YouTubeDownloader()
     if settings.tiktok_enabled:
         sources["tiktok"] = TikTokDownloader()
-    
-    # Сервис загрузки с worker pool
+
     download_service = DownloadService(sources, cache, queue)
     await download_service.start()
-    
-    # Общее хранилище URL
+
     url_storage = UrlStorage()
-    url_storage.cleanup(max_age_hours=24)  # очищаем при старте
-    
+    url_storage.cleanup(max_age_hours=24)
+
+    file_id_cache = FileIdCache()
+
     adapters = []
-    
+
     if settings.telegram_token:
-        telegram = TelegramAdapter()
+        telegram = TelegramAdapter(file_id_cache=file_id_cache)
         telegram_capability = TelegramCapability(
             download_service=download_service,
             messenger=telegram,
@@ -62,22 +59,11 @@ async def main():
         telegram.register_handlers(telegram_capability.register_handlers)
         adapters.append(telegram.start())
         logger.info("✅ Telegram adapter configured")
-    
-    if settings.vk_token:
-        vk = VKAdapter()
-        vk_capability = VKCapability(
-            download_service=download_service,
-            messenger=vk,
-            url_storage=url_storage
-        )
-        vk.register_handlers(vk_capability.register_handlers)
-        adapters.append(vk.start())
-        logger.info("✅ VK adapter configured")
-    
+
     if not adapters:
-        logger.error("❌ No adapters configured! Add TELEGRAM_TOKEN or VK_TOKEN to .env")
+        logger.error("❌ No adapters configured!")
         return
-    
+
     try:
         await asyncio.gather(*adapters)
     except (KeyboardInterrupt, SystemExit):

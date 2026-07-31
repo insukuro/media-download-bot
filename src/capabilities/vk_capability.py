@@ -112,18 +112,21 @@ class VKCapability(BaseCapability):
                         locale=self._get_locale_from_event(event)
                     )
     
-    def build_quality_keyboard(self, url_key: str, available_qualities: list):
-        """Строит VK клавиатуру с качествами"""
+    # src/capabilities/vk_capability.py
+    def build_quality_keyboard(self, url_key: str, available_qualities: list, cached_qualities: list = None):
+        if cached_qualities is None:
+            cached_qualities = []
+        
         buttons = []
         
-        # Видео качества
         video_qualities = [q for q in available_qualities 
-                         if q in [Quality.LOW, Quality.MEDIUM, Quality.HIGH]]
+                        if q in [Quality.LOW, Quality.MEDIUM, Quality.HIGH]]
         video_row = []
         for quality in video_qualities:
+            prefix = "✅ " if quality in cached_qualities else ""
             video_row.append(
                 VKButton.callback(
-                    text=f"📹 {quality.value}",
+                    text=f"{prefix}📹 {quality.value}",
                     callback_data=f"dl:{url_key}:{quality.value}:video",
                     color="primary"
                 )
@@ -131,14 +134,14 @@ class VKCapability(BaseCapability):
         if video_row:
             buttons.append(video_row)
         
-        # Аудио качества
         audio_qualities = [q for q in available_qualities 
-                         if q in [Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH]]
+                        if q in [Quality.AUDIO_LOW, Quality.AUDIO_MEDIUM, Quality.AUDIO_HIGH]]
         audio_row = []
         for quality in audio_qualities:
+            prefix = "✅ " if quality in cached_qualities else ""
             audio_row.append(
                 VKButton.callback(
-                    text=f"🎵 {quality.value}",
+                    text=f"{prefix}🎵 {quality.value}",
                     callback_data=f"dl:{url_key}:{quality.value}:audio",
                     color="positive"
                 )
@@ -147,7 +150,8 @@ class VKCapability(BaseCapability):
             buttons.append(audio_row)
         
         return VKKeyboard.create_inline(buttons)
-    
+
+
     async def send_metadata_response(self, chat_id: int, text: str, keyboard, 
                                    thumbnail_url: str, status_msg_id: int):
         """VK-специфичная отправка метаданных"""

@@ -13,5 +13,50 @@
     },
     "created_at": "2026-07-31T16:32:20.304112",
     "quality": "1080p"
+  },
+  "439ad97aa6d812506a2c95df3bb7b287": {
+    "file_path": "/home/ilkhom/projects/media-download-bot/cache/439ad97aa6d812506a2c95df3bb7b287",
+    "metadata": {
+      "url": "https://youtu.be/S9bCLPwzSC0?si=HuChQk2jqzEImx-e",
+      "title": "Eminem - Mockingbird [Official Music Video]",
+      "author": "EminemMusic",
+      "duration": 258,
+      "size": 10316205,
+      "thumbnail_url": "https://i.ytimg.com/vi/S9bCLPwzSC0/maxresdefault.jpg",
+      "media_type": "video",
+      "quality": "320kbps"
+    },
+    "created_at": "2026-08-01T01:03:50.342852",
+    "quality": "320kbps"
+  },
+  "22db257aa4cffc3a341f033bcdf76bd8": {
+    "file_path": "/home/ilkhom/projects/media-download-bot/cache/22db257aa4cffc3a341f033bcdf76bd8",
+    "metadata": {
+      "url": "https://youtu.be/ROUlQ2lRFiM",
+      "title": "lostlamb - #kbkhunt",
+      "author": "Lostlamb",
+      "duration": 60,
+      "size": 956851,
+      "thumbnail_url": "https://i.ytimg.com/vi/ROUlQ2lRFiM/maxresdefault.jpg",
+      "media_type": "video",
+      "quality": "128kbps"
+    },
+    "created_at": "2026-08-01T01:32:07.037781",
+    "quality": "128kbps"
+  },
+  "4192f403baa9dc1cc40f04fef238624c": {
+    "file_path": "/home/ilkhom/projects/media-download-bot/cache/4192f403baa9dc1cc40f04fef238624c",
+    "metadata": {
+      "url": "https://youtu.be/ROUlQ2lRFiM",
+      "title": "lostlamb - #kbkhunt",
+      "author": "Lostlamb",
+      "duration": 60,
+      "size": 1669079,
+      "thumbnail_url": "https://i.ytimg.com/vi/ROUlQ2lRFiM/maxresdefault.jpg",
+      "media_type": "video",
+      "quality": "360p"
+    },
+    "created_at": "2026-08-01T01:33:02.320645",
+    "quality": "360p"
   }
 }

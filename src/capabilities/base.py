@@ -1,4 +1,5 @@
 # src/capabilities/base.py
+import os
 from abc import ABC, abstractmethod
 from typing import Any
 from loguru import logger
@@ -26,84 +27,85 @@ class BaseCapability(ABC):
         self.messenger = messenger
         self.url_storage = url_storage
     
+    # src/capabilities/base.py (process_url_command — добавить cached_qualities)
     async def process_url_command(self, url: str, chat_id: Any, user_id: str, locale: str, source_type: str):
-        """Общая логика обработки URL команд"""
         try:
-            # Сохраняем URL
             url_key = self.url_storage.store(url)
-            
-            # Отправляем статус (получаем ID для дальнейшего удаления/редактирования)
             status_msg_id = await self.send_status_message(chat_id, "analyzing_url", locale)
             
             try:
-                # Получаем метаданные
                 metadata = await self.download_service.get_metadata(url)
-                
-                # Проверяем что метаданные не пустые
                 if not metadata or not metadata.title:
                     raise ValueError("Empty metadata received")
                 
                 available_qualities = await self.download_service.get_available_qualities(url)
                 
-                # Строим клавиатуру
-                keyboard = self.build_quality_keyboard(url_key, available_qualities)
+                # Получаем кэшированные в Redis качества
+                cached_qualities = []
+                if hasattr(self.messenger, 'file_id_cache') and self.messenger.file_id_cache:
+                    cached_qualities = await self.messenger.file_id_cache.get_cached_qualities(url)
                 
-                # Форматируем сообщение
+                # Передаём cached_qualities в клавиатуру
+                keyboard = self.build_quality_keyboard(url_key, available_qualities, cached_qualities)
+                
                 info_text = self._format_metadata_message(metadata, locale, source_type)
                 
-                # Отправляем результат
                 await self.send_metadata_response(
-                    chat_id=chat_id,
-                    text=info_text,
-                    keyboard=keyboard,
-                    thumbnail_url=metadata.thumbnail_url,
-                    status_msg_id=status_msg_id
+                    chat_id=chat_id, text=info_text, keyboard=keyboard,
+                    thumbnail_url=metadata.thumbnail_url, status_msg_id=status_msg_id
                 )
-                
             except Exception as e:
                 logger.error(f"Error processing URL from {source_type}: {e}")
-                # Пытаемся отредактировать статусное сообщение с ошибкой
                 try:
                     await self.messenger.send_message(
                         chat_id=chat_id,
                         text=self._t("error_processing_url", locale, error=str(e))
                     )
                 except:
-                    pass  # Если не получилось отправить ошибку, уже ничего не поделать
-                
+                    pass
         except Exception as e:
             logger.error(f"Critical error in process_url_command: {e}")
             await self.messenger.send_message(
                 chat_id=chat_id,
                 text=f"❌ Произошла ошибка: {str(e)}"
             )
+
+    # src/capabilities/base.py (замена process_music_command)
     async def process_music_command(self, url: str, chat_id: Any, user_id: str, locale: str):
-        """Общая логика для команды /music"""
         status_msg_id = await self.send_status_message(chat_id, "downloading_audio", locale)
-        
+
         try:
+            quality = Quality.AUDIO_HIGH
+
+            # 1. Проверяем FileIdCache
+            if hasattr(self.messenger, 'file_id_cache') and self.messenger.file_id_cache:
+                cached = await self.messenger.file_id_cache.get(url, quality)
+                if cached:
+                    logger.info(f"FileId cache hit for {url}")
+                    await self.messenger.send_media_by_file_id(
+                        chat_id=chat_id,
+                        file_id=cached['file_id'],
+                        media_type='audio',
+                        caption="✅"
+                    )
+                    if status_msg_id:
+                        await self.messenger.delete_message(chat_id, status_msg_id)
+                    return
+
+            # 2. Fallback: файловый кэш или загрузка
             task_id = await self.download_service.create_download_task(
-                url=url,
-                quality=Quality.AUDIO_HIGH,
-                user_id=user_id,
-                media_type=MediaType.AUDIO
+                url=url, quality=quality, user_id=user_id, media_type=MediaType.AUDIO
             )
-            
             result = await self.download_service.wait_for_task(task_id)
-            
+
             if result.status == DownloadStatus.COMPLETED:
-                await self.send_audio_result(
-                    chat_id=chat_id,
-                    result=result,
-                    locale=locale,
-                    status_msg_id=status_msg_id
-                )
+                await self.send_audio_result(chat_id=chat_id, result=result, locale=locale, status_msg_id=status_msg_id)
             else:
                 await self.messenger.send_message(
                     chat_id=chat_id,
                     text=self._t("download_failed", locale, error=result.error)
                 )
-                
+
         except Exception as e:
             logger.error(f"Error downloading audio: {e}")
             await self.messenger.send_message(
@@ -111,52 +113,56 @@ class BaseCapability(ABC):
                 text=self._t("error_processing_url", locale, error=str(e))
             )
     
+    # src/capabilities/base.py (process_download_callback — фикс caption)
     async def process_download_callback(self, callback_data: str, chat_id: Any, user_id: str, locale: str):
-        """Общая логика для callback загрузки"""
         try:
-            # Парсим callback data
             parts = callback_data.split(":", 3)
             if len(parts) != 4:
-                logger.error(f"Invalid callback data: {callback_data}")
                 return
-            
+
             _, url_key, quality_str, media_type_str = parts
             url = self.url_storage.get(url_key)
             quality = Quality(quality_str)
-            media_type = MediaType(media_type_str)
-            
-            # Сообщаем о начале загрузки
+            # media_type из callback: vid -> video, aud -> audio
+            media_type = MediaType.VIDEO if media_type_str == "vid" else MediaType.AUDIO
+
             await self.send_download_started(chat_id, quality, locale)
-            
-            # Создаем задачу
+
+            # 1. FileIdCache
+            if hasattr(self.messenger, 'file_id_cache') and self.messenger.file_id_cache:
+                cached = await self.messenger.file_id_cache.get(url, quality)
+                if cached:
+                    logger.info(f"FileId cache hit for {url}")
+                    try:
+                        await self.messenger.send_media_by_file_id(
+                            chat_id=chat_id,
+                            file_id=cached['file_id'],
+                            media_type=cached['media_type'],
+                            caption=cached.get('caption', '✅')
+                        )
+                        return
+                    except Exception as e:
+                        logger.warning(f"FileId expired: {e}")
+                        await self.messenger.file_id_cache.delete(url, quality)
+
+            # 2. Загрузка
             task_id = await self.download_service.create_download_task(
-                url=url,
-                quality=quality,
-                user_id=user_id,
-                media_type=media_type
+                url=url, quality=quality, user_id=user_id, media_type=media_type
             )
-            
-            # Ждем результат
             result = await self.download_service.wait_for_task(task_id)
-            
+
             if result.status == DownloadStatus.COMPLETED:
-                await self.send_download_result(
-                    chat_id=chat_id,
-                    result=result,
-                    quality=quality,
-                    locale=locale
-                )
+                await self.send_download_result(chat_id=chat_id, result=result, quality=quality, locale=locale)
             else:
                 await self.messenger.send_message(
                     chat_id=chat_id,
                     text=self._t("download_failed", locale, error=result.error)
                 )
-                
+
         except Exception as e:
             logger.error(f"Error in download callback: {e}")
             await self.messenger.send_message(
-                chat_id=chat_id,
-                text=self._t("error_occurred", locale, error=str(e))
+                chat_id=chat_id, text=self._t("error_occurred", locale, error=str(e))
             )
     
     def build_quality_keyboard(self, url_key: str, available_qualities: list) -> Any:
