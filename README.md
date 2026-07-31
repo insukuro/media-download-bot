@@ -60,6 +60,7 @@ i18n - интернационализация
 
 Зарегистрируйте в src/main.py
 
+
 ```
 media-download-bot
 ├─ Dockerfile.yml
@@ -71,6 +72,7 @@ media-download-bot
    ├─ __init__.py
    ├─ adapters
    │  ├─ __init__.py
+   │  ├─ base.py
    │  ├─ telegram
    │  │  ├─ __init__.py
    │  │  ├─ adapter.py

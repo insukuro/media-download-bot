@@ -23,10 +23,6 @@ class Settings(BaseSettings):
     cache_max_size_gb: int = Field(default=10)
     cache_ttl_hours: int = Field(default=72)
     
-    # Queue
-    max_concurrent_downloads: int = Field(default=2)
-    queue_max_size: int = Field(default=100)
-    download_timeout_seconds: int = Field(default=600)
     
     # Telegram
     telegram_token: str = Field(default="")
@@ -40,12 +36,21 @@ class Settings(BaseSettings):
     youtube_enabled: bool = Field(default=True)
     tiktok_enabled: bool = Field(default=True)
     
-    # Limits
-    max_file_size_mb: int = Field(default=50)
-    max_video_duration_minutes: int = Field(default=60)
     
     # Locale
     default_locale: str = Field(default="ru")
+        # Лимиты
+    max_file_size_mb: int = Field(default=50)  # Telegram лимит для ботов
+    max_video_duration_minutes: int = Field(default=60)
+    
+    # Очередь
+    max_concurrent_downloads: int = Field(default=2)  # Параллельные загрузки
+    queue_max_size: int = Field(default=100)
+    download_timeout_seconds: int = Field(default=600)  # 10 минут
+    
+    # Очистка
+    cleanup_interval_hours: int = Field(default=1)
+    completed_task_retention_hours: int = Field(default=24)
     
     class Config:
         env_file = ".env"

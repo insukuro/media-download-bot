@@ -1,3 +1,4 @@
+# src/sources/tiktok.py (исправленная версия)
 import asyncio
 import os
 import tempfile
@@ -35,18 +36,26 @@ class TikTokDownloader(BaseSourceDownloader):
     async def extract_metadata(self, url: str) -> MediaMetadata:
         """Извлечь метаданные TikTok видео"""
         try:
+            # Очищаем URL от параметров
+            clean_url = url.split('?')[0] if '?' in url else url
+            
             async with aiohttp.ClientSession() as session:
-                params = {'url': url}
-                async with session.get(self.api_url, params=params) as response:
+                params = {'url': clean_url}
+                async with session.get(self.api_url, params=params, timeout=30) as response:
+                    if response.status != 200:
+                        raise Exception(f"API returned status {response.status}")
+                    
                     data = await response.json()
                     
                     if data.get('code') != 0:
-                        raise Exception(f"TikTok API error: {data.get('msg')}")
+                        raise Exception(f"TikTok API error: {data.get('msg', 'Unknown error')}")
                     
                     video_data = data.get('data', {})
+                    if not video_data:
+                        raise Exception("No video data in response")
                     
                     return MediaMetadata(
-                        url=url,
+                        url=clean_url,
                         title=video_data.get('title', 'TikTok Video'),
                         author=video_data.get('author', {}).get('nickname', 'Unknown'),
                         duration=video_data.get('duration', 0),
@@ -57,7 +66,6 @@ class TikTokDownloader(BaseSourceDownloader):
                             'play_count': video_data.get('play_count'),
                             'digg_count': video_data.get('digg_count'),
                             'comment_count': video_data.get('comment_count'),
-                            'without_watermark': True
                         }
                     )
         except Exception as e:
@@ -68,16 +76,22 @@ class TikTokDownloader(BaseSourceDownloader):
         self,
         url: str,
         quality: Quality,
-        progress_callback: Optional[callable] = None
+        progress_callback=None  # Может быть None или callable
     ) -> DownloadResult:
         """Скачать TikTok видео без водяного знака"""
         temp_dir = tempfile.mkdtemp(dir=os.path.join(settings.base_dir, settings.temp_dir))
         
         try:
+            # Очищаем URL
+            clean_url = url.split('?')[0] if '?' in url else url
+            
             async with aiohttp.ClientSession() as session:
                 # Получаем информацию о видео
-                params = {'url': url}
-                async with session.get(self.api_url, params=params) as response:
+                params = {'url': clean_url}
+                async with session.get(self.api_url, params=params, timeout=30) as response:
+                    if response.status != 200:
+                        raise Exception(f"API returned status {response.status}")
+                    
                     data = await response.json()
                     
                     if data.get('code') != 0:
@@ -91,13 +105,16 @@ class TikTokDownloader(BaseSourceDownloader):
                         video_url = video_data.get('wmplay')  # С водяным знаком как fallback
                     
                     if not video_url:
-                        raise Exception("No video URL found")
+                        raise Exception("No video URL found in response")
                     
                     # Скачиваем видео
                     filename = f"tiktok_{video_data.get('video_id', 'unknown')}.mp4"
                     filepath = os.path.join(temp_dir, filename)
                     
-                    async with session.get(video_url) as video_response:
+                    async with session.get(video_url, timeout=300) as video_response:
+                        if video_response.status != 200:
+                            raise Exception(f"Video download failed with status {video_response.status}")
+                        
                         total_size = int(video_response.headers.get('content-length', 0))
                         downloaded = 0
                         
@@ -106,12 +123,20 @@ class TikTokDownloader(BaseSourceDownloader):
                                 f.write(chunk)
                                 downloaded += len(chunk)
                                 
+                                # Безопасный вызов progress_callback
                                 if progress_callback and total_size > 0:
                                     percent = (downloaded / total_size) * 100
-                                    await progress_callback(percent)
+                                    try:
+                                        progress_callback(percent)  # Не await! Это синхронный коллбэк
+                                    except Exception as e:
+                                        logger.debug(f"Progress callback error: {e}")
+                    
+                    # Проверяем что файл скачался
+                    if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+                        raise Exception("Downloaded file is empty or missing")
                     
                     # Создаем метаданные
-                    metadata = await self.extract_metadata(url)
+                    metadata = await self.extract_metadata(clean_url)
                     metadata.quality = quality
                     metadata.size = os.path.getsize(filepath)
                     
@@ -127,4 +152,4 @@ class TikTokDownloader(BaseSourceDownloader):
     
     async def get_available_qualities(self, url: str) -> List[Quality]:
         """TikTok поддерживает только одно качество"""
-        return [Quality.HIGH]  # TikTok видео в высоком качестве 
+        return [Quality.HIGH]
